@@ -17,15 +17,16 @@ from matplotlib.colors import ListedColormap
 OUT_DIR = Path("docs/images")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# 0 - стена (темная), 1 - свободно (светлая), 2 - след (красный), 3 - агент (желтый)
-CMAP = ListedColormap(["#1a1a1a", "#e0e0e0", "#ff8080", "#ffcc00"])
+# Цвета: 0 - путь (белый), 1 - стена (чёрный), 2 - след (красный), 3 - агент (жёлтый)
+CMAP = ListedColormap(["#ffffff", "#1a1a1a", "#ff4d4d", "#ffcc00"])
 
 
 def generate_maze(width, height):
-    """Генерация идеального лабиринта (алгоритм Прима)."""
-    maze = np.zeros((height, width), dtype=int)
+    """Генерация лабиринта (алгоритм Прима)."""
+    maze = np.ones((height, width), dtype=int)  # 1 = стена, 0 = путь
+    
     start_x, start_y = 1, 1
-    maze[start_y, start_x] = 1
+    maze[start_y, start_x] = 0
 
     walls = []
     for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
@@ -37,22 +38,27 @@ def generate_maze(width, height):
         idx = random.randrange(len(walls))
         wx, wy, px, py = walls.pop(idx)
 
-        if maze[wy, wx] == 0:
-            maze[wy, wx] = 1
-            maze[py, px] = 1
+        if maze[wy, wx] == 1:
+            maze[wy, wx] = 0
+            maze[py, px] = 0
 
             for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                 nx, ny = wx + dx, wy + dy
-                if 0 < nx < width - 1 and 0 < ny < height - 1 and maze[ny, nx] == 0:
+                if 0 < nx < width - 1 and 0 < ny < height - 1 and maze[ny, nx] == 1:
                     walls.append((nx, ny, wx, wy))
+                    
+    # Прорубаем вход (слева сверху) и выход (справа снизу)
+    maze[1, 0] = 0
+    maze[height - 2, width - 1] = 0
+    
     return maze
 
 
 def walk_bfs(maze):
-    """Поиск кратчайшего пути (для гения)."""
+    """Поиск кратчайшего пути (BFS)."""
     h, w = maze.shape
-    start = (1, 1)
-    end = (h - 2, w - 2)
+    start = (1, 0)
+    end = (h - 2, w - 1)
     queue = [start]
     visited = {start: None}
 
@@ -68,70 +74,68 @@ def walk_bfs(maze):
 
         for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             ny, nx = y + dy, x + dx
-            if 0 <= ny < h and 0 <= nx < w and maze[ny, nx] == 1 and (ny, nx) not in visited:
+            if 0 <= ny < h and 0 <= nx < w and maze[ny, nx] == 0 and (ny, nx) not in visited:
                 queue.append((ny, nx))
                 visited[(ny, nx)] = (y, x)
     return [start]
 
 
 def walk_dfs(maze):
-    """Поиск в глубину с возвратами (для раннего Чарли — тупики сознания)."""
+    """Поиск в глубину с возвратами (DFS)."""
     h, w = maze.shape
-    start = (1, 1)
+    start = (1, 0)
     path = [start]
     visited = {start}
     
-    # Стек для DFS: (текущая_точка, список_соседей)
-    # Чтобы анимация не шла вечно, ограничим количество шагов
-    stack = [(start, [(start[0]+dy, start[1]+dx) for dy, dx in [(0,1),(1,0),(0,-1),(-1,0)] 
-             if 0 <= start[0]+dy < h and 0 <= start[1]+dx < w and maze[start[0]+dy, start[1]+dx] == 1])]
+    stack = [(start, [(start[0] + dy, start[1] + dx) 
+             for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)] 
+             if 0 <= start[0] + dy < h and 0 <= start[1] + dx < w and maze[start[0] + dy, start[1] + dx] == 0])]
     
-    max_steps = 300  # Ограничение, чтобы GIF не был гигантским
+    max_steps = 500  # Ограничим, чтобы GIF не был слишком тяжёлым
     
     while stack and len(path) < max_steps:
         curr, neighbors = stack[-1]
-        
-        # Ищем непосещенного соседа
         unvisited = [n for n in neighbors if n not in visited]
         
         if unvisited:
             nxt = random.choice(unvisited)
             visited.add(nxt)
             path.append(nxt)
-            # Добавляем в стек нового соседа со списком его соседей
             nx, ny = nxt
-            next_neighbors = [(nx+dy, ny+dx) for dy, dx in [(0,1),(1,0),(0,-1),(-1,0)] 
-                              if 0 <= nx+dy < h and 0 <= ny+dx < w and maze[nx+dy, ny+dx] == 1]
+            next_neighbors = [(nx + dy, ny + dx) 
+                              for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)] 
+                              if 0 <= nx + dy < h and 0 <= ny + dx < w and maze[nx + dy, ny + dx] == 0]
             stack.append((nxt, next_neighbors))
         else:
-            # Тупик! Возвращаемся назад (backtracking)
             stack.pop()
             if stack:
-                path.append(stack[-1][0])
+                path.append(stack[-1][0])  # Шаг назад (backtrack)
                 
     return path
 
 
-def animate_maze(maze, path, title, subtitle, out_path, fps=10):
+def animate_maze(maze, path, title, subtitle, out_path, fps=15):
     """Создание GIF-анимации."""
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(8, 8))
     fig.suptitle(f"{title}\n{subtitle}", fontsize=12)
     ax.axis("off")
     
-    # Базовый слой лабиринта
-    display_base = maze.copy()
+    h, w = maze.shape
     
-    im = ax.imshow(display_base, cmap=CMAP, interpolation="nearest", vmin=0, vmax=3)
+    # Маркеры входа и выхода
+    ax.scatter(0, 1, color="#2ca02c", s=200, marker=">", zorder=5, label="Вход")
+    ax.scatter(w - 1, h - 2, color="#1f77b4", s=200, marker="*", zorder=5, label="Выход")
+    ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
+
+    im = ax.imshow(maze, cmap=CMAP, interpolation="nearest", vmin=0, vmax=3)
 
     def update(frame):
-        display = display_base.copy()
-        
-        # Рисуем след (все шаги до текущего)
+        display = maze.copy()
+        # Рисуем след
         for py, px in path[:frame]:
-            if display[py, px] == 1:
+            if display[py, px] == 0:
                 display[py, px] = 2
-                
-        # Рисуем агента (текущая позиция)
+        # Рисуем агента
         if frame > 0:
             ay, ax_ = path[frame - 1]
             display[ay, ax_] = 3
@@ -139,7 +143,7 @@ def animate_maze(maze, path, title, subtitle, out_path, fps=10):
         im.set_array(display)
         return [im]
 
-    anim = FuncAnimation(fig, update, frames=len(path) + 1, interval=100, blit=True)
+    anim = FuncAnimation(fig, update, frames=len(path) + 1, interval=50, blit=True)
     
     print(f"Сохранение {out_path.name} ({len(path)} кадров)...")
     anim.save(out_path, writer=PillowWriter(fps=fps))
@@ -151,10 +155,9 @@ def main():
     early_entry = df.iloc[0]    # Март
     peak_entry = df.iloc[40]    # Май
     
-    # Размер лабиринта (сделаем чуть больше для наглядности)
-    size = 21
+    # Увеличили размер для наглядности стенок
+    size = 41  
     
-    # Генерируем ОДИН лабиринт для обоих, чтобы сравнение было честным
     random.seed(42)
     maze = generate_maze(size, size)
     
@@ -163,7 +166,7 @@ def main():
     animate_maze(
         maze, path_dfs, 
         "Ранний Чарли / Регресс (Март)", 
-        f"Ошибки: {early_entry['unknown_ratio']*100:.1f}% | Поиск в глубину (тыкается в тупики)",
+        f"Ошибки: {early_entry['unknown_ratio']*100:.1f}% | Поиск в глубину (тупики)",
         OUT_DIR / "maze_early.gif"
     )
     
