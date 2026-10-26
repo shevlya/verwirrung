@@ -12,9 +12,10 @@ from pathlib import Path
 import pandas as pd
 import pymorphy3
 from razdel import tokenize
+from verwirrung.paths import ENTRIES_CSV, ENTRIES_NLP_CSV
 
-INPUT = Path("data/processed/entries.csv")
-OUTPUT = Path("data/processed/entries_nlp.csv")
+INPUT = ENTRIES_CSV
+OUTPUT = ENTRIES_NLP_CSV
 
 # Инициализируем морфологический анализатор один раз (это долго, ~2 сек)
 print("Загрузка словарей pymorphy3...")

@@ -1,6 +1,5 @@
 import random
 from collections import deque
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,8 +7,7 @@ import pandas as pd
 from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.colors import ListedColormap
 
-OUT_DIR = Path("docs/images")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+from verwirrung.paths import ENTRIES_NLP_CSV, DOCS_IMAGES
 
 # 0=коридор (белый), 1=стена (чёрный), 2=след (бледно-розовый), 3=агент (жёлтый)
 CMAP = ListedColormap(["#ffffff", "#1a1a1a", "#ffdede", "#ffcc00"])
@@ -57,7 +55,6 @@ def _neighbors(maze, pos):
 
 def bfs_path(maze, start, end):
     """Кратчайший путь BFS от start до end."""
-    h, w = maze.shape
     queue = deque([start])
     visited = {start: None}
     while queue:
@@ -76,7 +73,7 @@ def bfs_path(maze, start, end):
 
 
 def walk_dfs(maze, max_steps=4000):
-    """DFS с возвратами, останавливается при достижении выхода.
+    """DFS с возвратами. Останавливается при достижении выхода.
 
     Если за max_steps не дошёл — добирает остаток через BFS,
     чтобы агент гарантированно вышел из лабиринта.
@@ -143,8 +140,7 @@ def animate_maze(maze, path, title, subtitle, out_path, fps=20, target_frames=30
             ay, ax_ = path[idx - 1]
             display[ay, ax_] = 3
         im.set_array(display)
-        # imshow инвертирует y-ось, plot — нет. Ставим y как есть:
-        # matplotlib автоматически согласует их благодаря invert, который ставит imshow.
+        
         xs = [px for py, px in path[:idx]]
         ys = [py for py, px in path[:idx]]
         line.set_data(xs, ys)
@@ -160,7 +156,7 @@ def animate_maze(maze, path, title, subtitle, out_path, fps=20, target_frames=30
 
 
 def main():
-    df = pd.read_csv("data/processed/entries_nlp.csv")
+    df = pd.read_csv(ENTRIES_NLP_CSV)
     early_entry = df.iloc[0]
     peak_entry = df.iloc[40]
 
@@ -175,7 +171,7 @@ def main():
         "Ранний Чарли / Регресс (Март)",
         (f"Ошибки: {early_entry['unknown_ratio']*100:.1f}% | "
          f"DFS с возвратами: {len(path_dfs)} шагов"),
-        OUT_DIR / "maze_early.gif",
+        DOCS_IMAGES / "maze_early.gif",
     )
 
     # Гений — BFS (короткий, прямой путь)
@@ -186,7 +182,7 @@ def main():
         "Гений (Май)",
         (f"Ошибки: {peak_entry['unknown_ratio']*100:.1f}% | "
          f"Кратчайший путь: {len(path_bfs)} шагов"),
-        OUT_DIR / "maze_smart.gif",
+        DOCS_IMAGES / "maze_smart.gif",
     )
 
     print("\nГотово.")

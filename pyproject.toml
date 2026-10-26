@@ -40,3 +40,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/verwirrung"]
+
+[project.scripts]
+verwirrung-parse = "verwirrung.fb2:main"
+verwirrung-features = "verwirrung.features:main"
+verwirrung-timeline = "verwirrung.timeline:main"
+verwirrung-maze = "verwirrung.maze:main"

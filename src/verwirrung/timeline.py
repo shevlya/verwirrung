@@ -11,6 +11,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.ticker import FuncFormatter
+from verwirrung.paths import ENTRIES_NLP_CSV, DOCS_IMAGES
 
 plt.rcParams["font.family"] = "DejaVu Sans"
 plt.rcParams["axes.unicode_minus"] = False
@@ -42,7 +43,7 @@ def to_datetime(row):
 
 def load():
     # Читаем обогащённый файл!
-    df = pd.read_csv("data/processed/entries_nlp.csv")
+    df = pd.read_csv(ENTRIES_NLP_CSV)
     df["dt"] = df.apply(to_datetime, axis=1)
     return df.dropna(subset=["dt"]).sort_values("dt").reset_index(drop=True)
 
@@ -154,7 +155,7 @@ def main():
     )
     fig.tight_layout()
 
-    out = OUT_DIR / "timeline_nlp.png"
+    out = DOCS_IMAGES / "timeline_nlp.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Сохранено: {out}")
 

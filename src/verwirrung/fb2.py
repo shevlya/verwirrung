@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 from lxml import etree
 from razdel import sentenize, tokenize
+from verwirrung.paths import RAW_FB2, ENTRIES_CSV, NON_DIARY_CSV
 
 FB2_NS = "http://www.gribuser.ru/xml/fictionbook/2.0"
 NS = {"fb": FB2_NS}
@@ -99,10 +100,9 @@ def extract_subentries(section):
 
 
 def main():
-    raw_path = Path("data/raw/Kiz_Flowers.fb2")
-    out_diary = Path("data/processed/entries.csv")
-    out_other = Path("data/processed/non_diary.csv")
-    out_diary.parent.mkdir(parents=True, exist_ok=True)
+    raw_path = RAW_FB2
+    out_diary = ENTRIES_CSV
+    out_other = NON_DIARY_CSV
 
     tree = etree.parse(str(raw_path))
     body = tree.getroot().find("fb:body", NS)
