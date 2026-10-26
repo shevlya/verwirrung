@@ -145,17 +145,26 @@ def main():
     min_id = int(df["entry_id"].min())
     max_id = int(df["entry_id"].max())
 
+    # ДЕФОЛТНОЕ ЗНАЧЕНИЕ 50: сразу показываем пик интеллекта для красивого старта
     selected_id = st.sidebar.slider(
         "Выберите запись:",
         min_value=min_id,
         max_value=max_id,
-        value=1,
+        value=50,
     )
 
     entry = df[df["entry_id"] == selected_id].iloc[0]
     heatmap = compute_heatmap(df, maze, selected_id)
     
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Настройки отображения")
     show_path = st.sidebar.checkbox("Показывать синий путь текущей записи", value=True)
+    
+    # Защита авторских прав: по умолчанию текст скрыт
+    show_text = st.sidebar.checkbox(
+        "Показывать текст записи (только для локального просмотра)", 
+        value=False
+    )
 
     # Sidebar debug info
     st.sidebar.markdown("---")
@@ -168,6 +177,13 @@ def main():
 
     # --- Main ---
     st.title("🌼 Лабиринт сознания Чарли Гордона")
+    
+    # Приветственный текст для первого запуска
+    if selected_id == 50:
+        st.info("**Добро пожаловать!** Это середина книги — пик интеллекта Чарли. "
+                "Подвиньте слайдер влево (к марту) или вправо (к ноябрю), "
+                "чтобы увидеть, как меняется его сознание.")
+
     st.markdown(
         f"**Дата:** {entry['date_raw']} • "
         f"**Отчёт:** {entry['report_num']} • "
@@ -225,8 +241,13 @@ def main():
 
         st.markdown("---")
         st.subheader("Текст записи")
-        with st.container(height=450):
-            st.write(entry["text"].replace("\n", "\n\n"))
+        
+        if show_text:
+            with st.container(height=450):
+                st.write(entry["text"].replace("\n", "\n\n"))
+        else:
+            st.warning("🔒 Текст скрыт для соблюдения авторских прав. "
+                       "Установите галочку в меню слева, если вы читаете это локально и купили книгу.")
 
     st.sidebar.markdown("---")
     st.sidebar.caption("Проект по книге Дэниела Киза")
