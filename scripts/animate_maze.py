@@ -1,11 +1,5 @@
-"""Анимация прохождения лабиринта сознания Чарли (GIF).
-
-Логика:
-  - Ранний Чарли / Регресс (много ошибок): DFS (блуждание с возвратами в тупики).
-  - Гений (мало ошибок): BFS (кратчайший путь).
-"""
-
 import random
+from collections import deque
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -17,169 +11,186 @@ from matplotlib.colors import ListedColormap
 OUT_DIR = Path("docs/images")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Цвета: 0 - путь (белый), 1 - стена (чёрный), 2 - след (красный), 3 - агент (жёлтый)
-CMAP = ListedColormap(["#ffffff", "#1a1a1a", "#ff4d4d", "#ffcc00"])
+# 0=коридор (белый), 1=стена (чёрный), 2=след (бледно-розовый), 3=агент (жёлтый)
+CMAP = ListedColormap(["#ffffff", "#1a1a1a", "#ffdede", "#ffcc00"])
+LINE_COLOR = "#8b0000"  # тёмно-красный для траектории
 
 
 def generate_maze(width, height):
-    """Генерация лабиринта (алгоритм Прима)."""
-    maze = np.ones((height, width), dtype=int)  # 1 = стена, 0 = путь
-    
+    """Лабиринт (алгоритм Прима)."""
+    maze = np.ones((height, width), dtype=int)
     start_x, start_y = 1, 1
     maze[start_y, start_x] = 0
 
     walls = []
-    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-        nx, ny = start_x + dx, start_y + dy
-        if 0 < nx < width - 1 and 0 < ny < height - 1:
-            walls.append((nx, ny, start_x, start_y))
+
+    def add_walls(fx, fy):
+        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+            wx, wy = fx + dx, fy + dy
+            if 0 < wx < width - 1 and 0 < wy < height - 1 and maze[wy, wx] == 1:
+                walls.append((wx, wy, fx, fy))
+
+    add_walls(start_x, start_y)
 
     while walls:
         idx = random.randrange(len(walls))
         wx, wy, px, py = walls.pop(idx)
-
-        if maze[wy, wx] == 1:
+        if maze[wy, wx] != 1:
+            continue
+        nx, ny = wx + (wx - px), wy + (wy - py)
+        if 0 < nx < width - 1 and 0 < ny < height - 1 and maze[ny, nx] == 1:
             maze[wy, wx] = 0
-            maze[py, px] = 0
+            maze[ny, nx] = 0
+            add_walls(nx, ny)
 
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nx, ny = wx + dx, wy + dy
-                if 0 < nx < width - 1 and 0 < ny < height - 1 and maze[ny, nx] == 1:
-                    walls.append((nx, ny, wx, wy))
-                    
-    # Прорубаем вход (слева сверху) и выход (справа снизу)
     maze[1, 0] = 0
     maze[height - 2, width - 1] = 0
-    
     return maze
 
 
-def walk_bfs(maze):
-    """Поиск кратчайшего пути (BFS)."""
+def _neighbors(maze, pos):
     h, w = maze.shape
-    start = (1, 0)
-    end = (h - 2, w - 1)
-    queue = [start]
+    y, x = pos
+    return [(y + dy, x + dx) for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)]
+            if 0 <= y + dy < h and 0 <= x + dx < w and maze[y + dy, x + dx] == 0]
+
+
+def bfs_path(maze, start, end):
+    """Кратчайший путь BFS от start до end."""
+    h, w = maze.shape
+    queue = deque([start])
     visited = {start: None}
-
     while queue:
-        y, x = queue.pop(0)
-        if (y, x) == end:
+        cur = queue.popleft()
+        if cur == end:
             path = []
-            curr = end
-            while curr is not None:
-                path.append(curr)
-                curr = visited[curr]
+            while cur is not None:
+                path.append(cur)
+                cur = visited[cur]
             return path[::-1]
-
-        for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-            ny, nx = y + dy, x + dx
-            if 0 <= ny < h and 0 <= nx < w and maze[ny, nx] == 0 and (ny, nx) not in visited:
-                queue.append((ny, nx))
-                visited[(ny, nx)] = (y, x)
+        for nxt in _neighbors(maze, cur):
+            if nxt not in visited:
+                visited[nxt] = cur
+                queue.append(nxt)
     return [start]
 
 
-def walk_dfs(maze):
-    """Поиск в глубину с возвратами (DFS)."""
+def walk_dfs(maze, max_steps=4000):
+    """DFS с возвратами, останавливается при достижении выхода.
+
+    Если за max_steps не дошёл — добирает остаток через BFS,
+    чтобы агент гарантированно вышел из лабиринта.
+    """
     h, w = maze.shape
     start = (1, 0)
+    end = (h - 2, w - 1)
+
     path = [start]
     visited = {start}
-    
-    stack = [(start, [(start[0] + dy, start[1] + dx) 
-             for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)] 
-             if 0 <= start[0] + dy < h and 0 <= start[1] + dx < w and maze[start[0] + dy, start[1] + dx] == 0])]
-    
-    max_steps = 500  # Ограничим, чтобы GIF не был слишком тяжёлым
-    
+    stack = [(start, _neighbors(maze, start))]
+
     while stack and len(path) < max_steps:
-        curr, neighbors = stack[-1]
-        unvisited = [n for n in neighbors if n not in visited]
-        
+        cur, nb = stack[-1]
+        if cur == end:
+            return path  # дошли!
+        unvisited = [n for n in nb if n not in visited]
         if unvisited:
             nxt = random.choice(unvisited)
             visited.add(nxt)
             path.append(nxt)
-            nx, ny = nxt
-            next_neighbors = [(nx + dy, ny + dx) 
-                              for dy, dx in [(0, 1), (1, 0), (0, -1), (-1, 0)] 
-                              if 0 <= nx + dy < h and 0 <= ny + dx < w and maze[nx + dy, ny + dx] == 0]
-            stack.append((nxt, next_neighbors))
+            stack.append((nxt, _neighbors(maze, nxt)))
         else:
             stack.pop()
             if stack:
-                path.append(stack[-1][0])  # Шаг назад (backtrack)
-                
+                path.append(stack[-1][0])  # шаг назад
+
+    # Fallback: если не дошли за max_steps, добираем путь до выхода
+    if path[-1] != end:
+        tail = bfs_path(maze, path[-1], end)
+        path.extend(tail[1:])
     return path
 
 
-def animate_maze(maze, path, title, subtitle, out_path, fps=15):
-    """Создание GIF-анимации."""
+def animate_maze(maze, path, title, subtitle, out_path, fps=20, target_frames=300):
+    """GIF с траекторией."""
     fig, ax = plt.subplots(figsize=(8, 8))
     fig.suptitle(f"{title}\n{subtitle}", fontsize=12)
     ax.axis("off")
-    
+
     h, w = maze.shape
-    
-    # Маркеры входа и выхода
-    ax.scatter(0, 1, color="#2ca02c", s=200, marker=">", zorder=5, label="Вход")
-    ax.scatter(w - 1, h - 2, color="#1f77b4", s=200, marker="*", zorder=5, label="Выход")
-    ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
+
+    ax.scatter(0, 1, color="#2ca02c", s=220, marker=">", zorder=6, label="Вход")
+    ax.scatter(w - 1, h - 2, color="#1f77b4", s=260, marker="*", zorder=6, label="Выход")
+    ax.legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize=9)
 
     im = ax.imshow(maze, cmap=CMAP, interpolation="nearest", vmin=0, vmax=3)
+    line, = ax.plot([], [], color=LINE_COLOR, linewidth=1.8, alpha=0.85, zorder=4)
 
-    def update(frame):
+    # Прореживаем кадры, чтобы GIF не был гигантским
+    frame_skip = max(1, len(path) // target_frames)
+    sampled = path[::frame_skip]
+    if sampled[-1] != path[-1]:
+        sampled.append(path[-1])
+
+    def update(frame_idx):
+        idx = min(frame_idx * frame_skip, len(path))
         display = maze.copy()
-        # Рисуем след
-        for py, px in path[:frame]:
+        for py, px in path[:idx]:
             if display[py, px] == 0:
                 display[py, px] = 2
-        # Рисуем агента
-        if frame > 0:
-            ay, ax_ = path[frame - 1]
+        if idx > 0:
+            ay, ax_ = path[idx - 1]
             display[ay, ax_] = 3
-            
         im.set_array(display)
-        return [im]
+        # imshow инвертирует y-ось, plot — нет. Ставим y как есть:
+        # matplotlib автоматически согласует их благодаря invert, который ставит imshow.
+        xs = [px for py, px in path[:idx]]
+        ys = [py for py, px in path[:idx]]
+        line.set_data(xs, ys)
+        return [im, line]
 
-    anim = FuncAnimation(fig, update, frames=len(path) + 1, interval=50, blit=True)
-    
-    print(f"Сохранение {out_path.name} ({len(path)} кадров)...")
+    anim = FuncAnimation(fig, update, frames=len(sampled) + 1,
+                         interval=1000 // fps, blit=True)
+
+    print(f"Сохранение {out_path.name} "
+          f"(шагов: {len(path)}, кадров: {len(sampled) + 1}, skip={frame_skip})...")
     anim.save(out_path, writer=PillowWriter(fps=fps))
     plt.close(fig)
 
 
 def main():
     df = pd.read_csv("data/processed/entries_nlp.csv")
-    early_entry = df.iloc[0]    # Март
-    peak_entry = df.iloc[40]    # Май
-    
-    # Увеличили размер для наглядности стенок
-    size = 41  
-    
+    early_entry = df.iloc[0]
+    peak_entry = df.iloc[40]
+
+    size = 41
     random.seed(42)
     maze = generate_maze(size, size)
-    
-    # 1. Ранний Чарли (DFS)
+
+    # Ранний Чарли — DFS с возвратами (длинный, извилистый путь)
     path_dfs = walk_dfs(maze)
     animate_maze(
-        maze, path_dfs, 
-        "Ранний Чарли / Регресс (Март)", 
-        f"Ошибки: {early_entry['unknown_ratio']*100:.1f}% | Поиск в глубину (тупики)",
-        OUT_DIR / "maze_early.gif"
-    )
-    
-    # 2. Гений (BFS)
-    path_bfs = walk_bfs(maze)
-    animate_maze(
-        maze, path_bfs, 
-        "Гений (Май)", 
-        f"Ошибки: {peak_entry['unknown_ratio']*100:.1f}% | Кратчайший путь (BFS)",
-        OUT_DIR / "maze_smart.gif"
+        maze, path_dfs,
+        "Ранний Чарли / Регресс (Март)",
+        (f"Ошибки: {early_entry['unknown_ratio']*100:.1f}% | "
+         f"DFS с возвратами: {len(path_dfs)} шагов"),
+        OUT_DIR / "maze_early.gif",
     )
 
-    print("Готово! Файлы лежат в docs/images/")
+    # Гений — BFS (короткий, прямой путь)
+    h, w = maze.shape
+    path_bfs = bfs_path(maze, (1, 0), (h - 2, w - 1))
+    animate_maze(
+        maze, path_bfs,
+        "Гений (Май)",
+        (f"Ошибки: {peak_entry['unknown_ratio']*100:.1f}% | "
+         f"Кратчайший путь: {len(path_bfs)} шагов"),
+        OUT_DIR / "maze_smart.gif",
+    )
+
+    print("\nГотово.")
+    print(f"  dumb: {len(path_dfs)} шагов,  smart: {len(path_bfs)} шагов")
+    print(f"  Отношение длин путей: ×{len(path_dfs) / max(len(path_bfs), 1):.1f}")
 
 
 if __name__ == "__main__":
