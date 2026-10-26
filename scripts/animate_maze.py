@@ -113,7 +113,8 @@ def walk_dfs(maze, max_steps=4000):
 
 def animate_maze(maze, path, title, subtitle, out_path, fps=20, target_frames=300):
     """GIF с траекторией."""
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(10, 8))
+    fig.subplots_adjust(top=0.9, bottom=0.08, left=0.02, right=0.78)
     fig.suptitle(f"{title}\n{subtitle}", fontsize=12)
     ax.axis("off")
 
